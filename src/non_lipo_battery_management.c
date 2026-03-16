@@ -180,12 +180,12 @@ static int non_lipo_sample_fetch(const struct device *dev, enum sensor_channel c
 
         // mod start------------------------------                      
         //uint16_t millivolts = val;
-        uint32_t mv = val;
-        mv = mv * 1470 / 470;
+        uint32_t millivolts = val;
+        millivolts = millivolts * 1470 / 470;
 
         // 初回
         if (drv_data->filtered_mv == 0) {
-            drv_data->filtered_mv = mv;
+            drv_data->filtered_mv = millivolts;
         }
 
         // 前回値を保存
@@ -193,7 +193,7 @@ static int non_lipo_sample_fetch(const struct device *dev, enum sensor_channel c
 
         // EMA（指数移動平均）
         uint16_t filtered =
-            (prev * 7 + mv * 3) / 10;
+            (prev * 7 + millivolts * 3) / 10;
 
         // 変化量制限（前回値ベースで判定）
         int16_t delta = (int16_t)filtered - (int16_t)prev;
@@ -208,18 +208,18 @@ static int non_lipo_sample_fetch(const struct device *dev, enum sensor_channel c
         drv_data->filtered_mv = filtered;
         drv_data->millivolts = filtered;
         drv_data->state_of_charge = non_lipo_mv_to_pct(filtered);
-         // mod end-------------------------------
 
-        LOG_DBG("ADC raw %d ~ %d mV", drv_data->adc_raw, millivolts);
+        LOG_DBG("ADC raw %d ~ %d mV", drv_data->adc_raw, drv_data->millivolts);
         
 
         //drv_data->millivolts = millivolts;
         //drv_data->state_of_charge = non_lipo_mv_to_pct(millivolts);
         
-        LOG_DBG("Battery: %d mV, %d%%", millivolts, drv_data->state_of_charge);
+        LOG_DBG("Battery: %d mV, %d%%", drv_data->millivolts, drv_data->state_of_charge);
         
         // Check if we need to shut down due to low voltage
-        check_voltage_and_shutdown(millivolts);
+        check_voltage_and_shutdown(drv_data->millivolts);
+        // mod end-------------------------------
     } else {
         LOG_DBG("Failed to read ADC: %d", rc);
     }
