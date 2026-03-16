@@ -101,6 +101,10 @@ struct non_lipo_data {
     int16_t adc_raw;
     uint16_t millivolts;
     uint8_t state_of_charge;
+
+    // add start-----------
+    uint16_t filtered_mv;
+    // add end-------------
 };
 
 static uint8_t non_lipo_mv_to_pct(int16_t mv) {
@@ -174,11 +178,43 @@ static int non_lipo_sample_fetch(const struct device *dev, enum sensor_channel c
         adc_raw_to_millivolts(adc_ref_internal(drv_data->adc), drv_data->acc.gain, as->resolution,
                               &val);
 
-        uint16_t millivolts = val;
+        // mod start------------------------------                      
+        //uint16_t millivolts = val;
+        uint32_t mv = val;
+        mv = mv * 1470 / 470;
+
+        // 初回
+        if (drv_data->filtered_mv == 0) {
+            drv_data->filtered_mv = mv;
+        }
+
+        // 前回値を保存
+        uint16_t prev = drv_data->filtered_mv;
+
+        // EMA（指数移動平均）
+        uint16_t filtered =
+            (prev * 7 + mv * 3) / 10;
+
+        // 変化量制限（前回値ベースで判定）
+        int16_t delta = (int16_t)filtered - (int16_t)prev;
+
+        if (delta > 50) {
+            filtered = prev + 50;
+        } else if (delta < -50) {
+            filtered = prev - 50;
+        }
+
+        // 反映
+        drv_data->filtered_mv = filtered;
+        drv_data->millivolts = filtered;
+        drv_data->state_of_charge = non_lipo_mv_to_pct(filtered);
+         // mod end-------------------------------
+
         LOG_DBG("ADC raw %d ~ %d mV", drv_data->adc_raw, millivolts);
         
-        drv_data->millivolts = millivolts;
-        drv_data->state_of_charge = non_lipo_mv_to_pct(millivolts);
+
+        //drv_data->millivolts = millivolts;
+        //drv_data->state_of_charge = non_lipo_mv_to_pct(millivolts);
         
         LOG_DBG("Battery: %d mV, %d%%", millivolts, drv_data->state_of_charge);
         
@@ -255,7 +291,7 @@ static int non_lipo_init(const struct device *dev) {
         .channels = BIT(0),
         .buffer = &drv_data->adc_raw,
         .buffer_size = sizeof(drv_data->adc_raw),
-        .oversampling = 4,
+        .oversampling = 6,
         .calibrate = true,
     };
 
