@@ -107,21 +107,21 @@ struct non_lipo_data {
 };
 
 // add start-----------------------------------------------
-static uint16_t voltage_buffer[5];
+static uint16_t voltage_buffer[10];
 static uint8_t index = 0;
 static bool buffer_full = false;
 
 static uint16_t get_battery_voltage_avg(uint16_t new_voltage) {
 
     voltage_buffer[index] = new_voltage;
-    index = (index + 1) % 5;
+    index = (index + 1) % 10;
 
     if (index == 0) {
         buffer_full = true;
     }
 
     uint32_t sum = 0;
-    uint8_t count = buffer_full ? 5 : index;
+    uint8_t count = buffer_full ? 10 : index;
 
     if (count == 0) {
         return new_voltage;
