@@ -175,6 +175,11 @@ static int non_lipo_sample_fetch(const struct device *dev, enum sensor_channel c
                               &val);
 
         uint16_t millivolts = val;
+
+        // add start---------------------------
+        millivolts = millivolts * 3.1276;
+         // add end----------------------------
+         
         LOG_DBG("ADC raw %d ~ %d mV", drv_data->adc_raw, millivolts);
         
         drv_data->millivolts = millivolts;
