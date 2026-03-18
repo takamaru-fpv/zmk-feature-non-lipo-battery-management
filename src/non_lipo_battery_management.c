@@ -101,7 +101,40 @@ struct non_lipo_data {
     int16_t adc_raw;
     uint16_t millivolts;
     uint8_t state_of_charge;
+    // add start-----------
+    uint16_t avg_mv;
+    // add end-------------
 };
+
+// add start-----------------------------------------------
+static uint16_t voltage_buffer[5];
+static uint8_t index = 0;
+static bool buffer_full = false;
+
+static uint16_t get_battery_voltage_avg(uint16_t new_voltage) {
+
+    voltage_buffer[index] = new_voltage;
+    index = (index + 1) % 5;
+
+    if (index == 0) {
+        buffer_full = true;
+    }
+
+    uint32_t sum = 0;
+    uint8_t count = buffer_full ? 5 : index;
+
+    if (count == 0) {
+        return new_voltage;
+    }
+
+    for (uint8_t i = 0; i < count; i++) {
+        sum += voltage_buffer[i];
+    }
+
+    return sum / count;
+}
+// add end-------------------------------------------------
+
 
 static uint8_t non_lipo_mv_to_pct(int16_t mv) {
     // Linear approximation based on min/max voltage config
@@ -116,13 +149,13 @@ static uint8_t non_lipo_mv_to_pct(int16_t mv) {
            (CONFIG_ZMK_NON_LIPO_MAX_MV - CONFIG_ZMK_NON_LIPO_MIN_MV);
 }
 
-static void check_voltage_and_shutdown(uint16_t millivolts) {
+static void check_voltage_and_shutdown(uint16_t avg_mv) {
     // Check if voltage is below the low threshold
-    if (millivolts <= CONFIG_ZMK_NON_LIPO_LOW_MV) {
+    if (avg_mv <= CONFIG_ZMK_NON_LIPO_LOW_MV) {
         // Only shut down if USB power is not connected
         if (!zmk_usb_is_powered()) {
             LOG_WRN("Battery voltage (%dmv) below critical threshold (%dmv) and USB not connected, shutting down",
-                    millivolts, CONFIG_ZMK_NON_LIPO_LOW_MV);
+                    avg_mv, CONFIG_ZMK_NON_LIPO_LOW_MV);
 
             // Wait for logs to flush
             k_sleep(K_MSEC(100));
@@ -132,7 +165,7 @@ static void check_voltage_and_shutdown(uint16_t millivolts) {
             sys_poweroff();
         } else {
             LOG_WRN("Battery voltage (%dmv) below critical threshold (%dmv) but USB power detected, staying on",
-                    millivolts, CONFIG_ZMK_NON_LIPO_LOW_MV);
+                    avg_mv, CONFIG_ZMK_NON_LIPO_LOW_MV);
         }
     }
 }
@@ -177,18 +210,20 @@ static int non_lipo_sample_fetch(const struct device *dev, enum sensor_channel c
         uint16_t millivolts = val;
 
         // add start---------------------------
-        millivolts = millivolts * 3.1276;
+        millivolts = millivolts * 3.12766;
+        uint16_t avg_mv = get_battery_voltage_avg(millivolts);
          // add end----------------------------
          
-        LOG_DBG("ADC raw %d ~ %d mV", drv_data->adc_raw, millivolts);
+        LOG_DBG("ADC raw %d ~ %d mV", drv_data->adc_raw, avg_mv);
         
         drv_data->millivolts = millivolts;
-        drv_data->state_of_charge = non_lipo_mv_to_pct(millivolts);
+        drv_data->avg_mv = avg_mv;
+        drv_data->state_of_charge = non_lipo_mv_to_pct(drv_data->avg_mv);
         
-        LOG_DBG("Battery: %d mV, %d%%", millivolts, drv_data->state_of_charge);
+        LOG_DBG("Battery: %d mV, %d%%", drv_data->avg_mv, drv_data->state_of_charge);
         
         // Check if we need to shut down due to low voltage
-        check_voltage_and_shutdown(millivolts);
+        check_voltage_and_shutdown(drv_data->avg_mv);
     } else {
         LOG_DBG("Failed to read ADC: %d", rc);
     }
@@ -212,8 +247,8 @@ static int non_lipo_channel_get(const struct device *dev, enum sensor_channel ch
 
     switch (chan) {
     case SENSOR_CHAN_GAUGE_VOLTAGE:
-        val->val1 = drv_data->millivolts / 1000;
-        val->val2 = (drv_data->millivolts % 1000) * 1000;
+        val->val1 = drv_data->avg_mv / 1000;
+        val->val2 = (drv_data->avg_mv % 1000) * 1000;
         break;
 
     case SENSOR_CHAN_GAUGE_STATE_OF_CHARGE:
@@ -298,7 +333,13 @@ static int non_lipo_init(const struct device *dev) {
 }
 
 static struct non_lipo_data non_lipo_data = {
-    .adc = DEVICE_DT_GET(DT_IO_CHANNELS_CTLR(DT_DRV_INST(0)))
+    .adc = DEVICE_DT_GET(DT_IO_CHANNELS_CTLR(DT_DRV_INST(0))),
+    //add start-------------------------------
+    //avgの初期値をMAX値とする。
+    //デフォルトの0が参照されて意図せずshutdownが起きるのを避けるため。
+    .avg_mv = CONFIG_ZMK_NON_LIPO_MAX_MV,
+    //add end---------------------------------
+
 };
 
 static const struct non_lipo_config non_lipo_cfg = {
