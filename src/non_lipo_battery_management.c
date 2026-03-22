@@ -42,9 +42,9 @@ static void adv_timeout_handler(struct k_work *work) {
             // Wait for logs to flush
             k_sleep(K_MSEC(100));
 
-            // Use ZMK PM system instead of direct sys_poweroff
-            // This allows wakeup-source to function properly
-            zmk_pm_soft_off();
+            // Power off the system
+            zmk_pm_suspend_devices();
+            sys_poweroff();
         } else {
             // Not timed out yet, reschedule the timer
             int64_t remaining = CONFIG_ZMK_NON_LIPO_ADV_SLEEP_TIMEOUT - elapsed;
@@ -131,8 +131,9 @@ static void check_voltage_and_shutdown(uint16_t millivolts) {
             // Wait for logs to flush
             k_sleep(K_MSEC(100));
 
-            // Use ZMK PM system instead of direct sys_poweroff
-            zmk_pm_soft_off();
+            // Power off system
+            zmk_pm_suspend_devices();
+            sys_poweroff();
         } else {
             LOG_WRN("Battery voltage (%dmv) below critical threshold (%dmv) but USB power detected, staying on",
                     millivolts, CONFIG_ZMK_NON_LIPO_LOW_MV);
