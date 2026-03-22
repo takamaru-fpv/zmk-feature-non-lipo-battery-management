@@ -44,7 +44,7 @@ static void adv_timeout_handler(struct k_work *work) {
 
             // Power off the system
             zmk_pm_suspend_devices();
-            sys_poweroff();
+            //sys_poweroff();
         } else {
             // Not timed out yet, reschedule the timer
             int64_t remaining = CONFIG_ZMK_NON_LIPO_ADV_SLEEP_TIMEOUT - elapsed;
